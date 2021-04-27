@@ -1,9 +1,12 @@
 import dayjs, { Dayjs } from 'dayjs';
 import { firestore, getPrice, iamport, logger, send, Webhook } from './tools';
+import InternalClient from './tools/internalClient';
+
 
 const rideCol = firestore.collection('ride');
 const userCol = firestore.collection('users');
 const kickCol = firestore.collection('kick');
+const kickboardClient = InternalClient.getKickboard();
 
 const maxHours = Number(process.env.MAX_HOUR || 3);
 const sleep = (timeout: number) =>
@@ -54,8 +57,11 @@ async function main() {
     }
 
     const birthday = user.birthday.format('YYYY년 MM월 DD일');
+    const last = await isLastRide(ride);
     logger.info(
-      `${i++} >> ${user.username}님 ${user.phone} ${birthday} - ${usedAt}`
+      `${i++} >> [${last}] ${user.username}님 ${
+        user.phone
+      } ${birthday} - ${usedAt}`
     );
 
     if (user.currentRide !== ride.rideId) {
@@ -64,8 +70,20 @@ async function main() {
       continue;
     }
 
-    // await terminateRide(ride, user);
+    await terminateRide(ride, user);
   }
+}
+
+async function isLastRide(ride: Ride): Promise<boolean> {
+  const rides = await rideCol
+    .where('kickName', '==', ride.kickboardId)
+    .orderBy('start_time', 'desc')
+    .limit(1)
+    .get();
+
+  let rideId;
+  rides.forEach((res) => (rideId = res.id));
+  return rideId ? ride.rideId === rideId : false;
 }
 
 async function getUser(uid: string): Promise<User | undefined> {
@@ -96,12 +114,10 @@ async function terminateRide(ride: Ride, user: User): Promise<void> {
   const cardName = payment ? payment.cardName : failed;
   const priceStr = `${price.toLocaleString()}원`;
   const props = { user, ride, usedAt, maxHours, priceStr, cardName };
+  const isLast = await isLastRide(ride);
+  if (isLast) await stopKickboard(ride);
 
-  // add stop kickboard
   await Promise.all([
-    kickCol.doc(ride.kickboardId).update({
-      can_ride: true,
-    }),
     userDoc.update({
       curr_ride: null,
       currcoupon: null,
@@ -128,6 +144,30 @@ async function terminateRide(ride: Ride, user: User): Promise<void> {
       `✅ ${user.username}님이 3시간 이상 이용하여 자동으로 종료되었습니다. ${cardName} / ${usedAt} / ${user.phone} / ${ride.branch} / ${priceStr}`
     ),
   ]);
+}
+
+async function getKickboardCodeById(
+  kickboardId: string
+): Promise<string | null> {
+  const kickboard = await kickCol.doc(kickboardId).get();
+  const data = kickboard.data();
+  return data && data.code;
+}
+
+async function stopKickboard(ride: Ride): Promise<void> {
+  const code = await getKickboardCodeById(ride.kickboardId);
+  await kickCol.doc(ride.kickboardId).update({ can_ride: true });
+  if (code) {
+    try {
+      const kickboard = await kickboardClient.getKickboard(code);
+      await kickboard.stop();
+    } catch (err) {
+      console.log(err);
+      logger.info(`킥보드를 찾을 수 없습니다. ${code}`);
+    }
+  } else {
+    logger.info(`킥보드를 찾을 수 없습니다. ${ride.kickboardId}`);
+  }
 }
 
 async function tryPayment(
@@ -211,12 +251,18 @@ async function deleteRide(ride: Ride, user: User): Promise<void> {
 async function getRides(): Promise<Ride[]> {
   const rides: Ride[] = [];
   const subtractDayjs = dayjs().subtract(3, 'hours');
-  const inuseRides = await rideCol
-    .where('start_time', '<', subtractDayjs.toDate())
-    // .where('uid', '==', 'Lf6lP5Pv1rTPViWUJwKvmMGPwHj2')
-    .where('end_time', '==', null)
-    .orderBy('start_time', 'asc')
-    .get();
+  const inuseRides =
+    process.env.NODE_ENV === 'prod'
+      ? await rideCol
+          .where('start_time', '<', subtractDayjs.toDate())
+          .where('end_time', '==', null)
+          .orderBy('start_time', 'asc')
+          .get()
+      : await rideCol
+          .where('uid', '==', 'Lf6lP5Pv1rTPViWUJwKvmMGPwHj2')
+          .where('end_time', '==', null)
+          .orderBy('start_time', 'asc')
+          .get();
 
   logger.info(`반납 안한 라이드, ${inuseRides.size}개 발견하였습니다.`);
   inuseRides.forEach((ride) => {
