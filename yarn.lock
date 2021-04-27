@@ -1949,6 +1949,14 @@ onetime@^5.1.0:
   dependencies:
     mimic-fn "^2.1.0"
 
+openapi-internal-sdk@^1.4.3:
+  version "1.4.3"
+  resolved "https://hikick-547032093617.d.codeartifact.ap-northeast-1.amazonaws.com:443/npm/hikick/openapi-internal-sdk/-/openapi-internal-sdk-1.4.3.tgz#b1d44c9c51e6a7c489aaa782c636a5bbb7a162cb"
+  integrity sha512-4l2RDXlFXRaZuYInokMZFsRNU187dTq7cUydsYAtLl4LFPcgTZjS3gAn5ken7EtC18P80J9nnw+K6iSLQoGApg==
+  dependencies:
+    axios "^0.21.1"
+    jsonwebtoken "^8.5.1"
+
 optionator@^0.9.1:
   version "0.9.1"
   resolved "https://registry.yarnpkg.com/optionator/-/optionator-0.9.1.tgz#4f236a6373dae0566a6d43e1326674f50c291499"
