@@ -46,8 +46,27 @@ interface Ride {
 }
 
 async function main() {
-  logger.info('시스템을 시작합니다.');
-  await waitForConnect();
+  try {
+    logger.info('시스템을 시작합니다.');
+    await waitForConnect();
+    mqttClient.on('error', (err) => {
+      throw err;
+    });
+
+    while (true) {
+      logger.info('작업을 시작합니다.');
+      await runSchedule();
+      logger.info('5분 동안 대기합니다.');
+      await sleep(5 * 60 * 1000);
+    }
+  } catch (err) {
+    await Webhook.send(`❌ 오류가 발생하여 시스템을 재시작합니다.`);
+    logger.error(err.message);
+    logger.error(err.stack);
+  }
+}
+
+async function runSchedule() {
   const rides = await getRides();
   let i = 0;
   for (const ride of rides) {
@@ -63,17 +82,14 @@ async function main() {
     const usedAt = `${startedAt} ~ (${diff}분, ${price.toLocaleString()}원)`;
 
     if (!user || !user.phone) {
-      logger.warn('사용자를 찾을 수 없습니다.');
+      logger.warn(`사용자를 찾을 수 없습니다. ${JSON.stringify(user)}`);
       logger.warn(usedAt);
       continue;
     }
 
     const birthday = user.birthday.format('YYYY년 MM월 DD일');
-    const last = await isLastRide(ride);
     logger.info(
-      `${i++} >> [${last}] ${user.username}님 ${
-        user.phone
-      } ${birthday} - ${usedAt}`
+      `${i++} >> ${user.username}님 ${user.phone} ${birthday} - ${usedAt}`
     );
 
     if (user.currentRide !== ride.rideId) {
