@@ -1,16 +1,27 @@
+import { Webhook, firestore, getPrice, iamport, logger, send } from './tools';
 import dayjs, { Dayjs } from 'dayjs';
-import { firestore, getPrice, iamport, logger, send, Webhook } from './tools';
-import InternalClient from './tools/internalClient';
 
+import mqtt from 'mqtt';
 
 const rideCol = firestore.collection('ride');
 const userCol = firestore.collection('users');
 const kickCol = firestore.collection('kick');
-const kickboardClient = InternalClient.getKickboard();
+const mqttClient = mqtt.connect(String(process.env.MQTT_URL), {
+  username: String(process.env.MQTT_USERNAME),
+  password: String(process.env.MQTT_PASSWORD),
+});
 
 const maxHours = Number(process.env.MAX_HOUR || 3);
 const sleep = (timeout: number) =>
   new Promise((resolve) => setTimeout(resolve, timeout));
+const waitForConnect = () =>
+  new Promise<void>((resolve) => {
+    mqttClient.on('connect', () => {
+      mqttClient.subscribe('data/#');
+      logger.info(`서버와 연결되었습니다.`);
+      resolve();
+    });
+  });
 
 interface User {
   uid: string;
@@ -36,6 +47,7 @@ interface Ride {
 
 async function main() {
   logger.info('시스템을 시작합니다.');
+  await waitForConnect();
   const rides = await getRides();
   let i = 0;
   for (const ride of rides) {
@@ -50,7 +62,7 @@ async function main() {
     const startedAt = ride.startedAt.format('YYYY년 MM월 DD일 HH시 mm분');
     const usedAt = `${startedAt} ~ (${diff}분, ${price.toLocaleString()}원)`;
 
-    if (!user) {
+    if (!user || !user.phone) {
       logger.warn('사용자를 찾을 수 없습니다.');
       logger.warn(usedAt);
       continue;
@@ -115,6 +127,7 @@ async function terminateRide(ride: Ride, user: User): Promise<void> {
   const priceStr = `${price.toLocaleString()}원`;
   const props = { user, ride, usedAt, maxHours, priceStr, cardName };
   const isLast = await isLastRide(ride);
+  user.username = user.username || '고객';
   if (isLast) await stopKickboard(ride);
 
   await Promise.all([
@@ -155,19 +168,8 @@ async function getKickboardCodeById(
 }
 
 async function stopKickboard(ride: Ride): Promise<void> {
-  const code = await getKickboardCodeById(ride.kickboardId);
   await kickCol.doc(ride.kickboardId).update({ can_ride: true });
-  if (code) {
-    try {
-      const kickboard = await kickboardClient.getKickboard(code);
-      await kickboard.stop();
-    } catch (err) {
-      console.log(err);
-      logger.info(`킥보드를 찾을 수 없습니다. ${code}`);
-    }
-  } else {
-    logger.info(`킥보드를 찾을 수 없습니다. ${ride.kickboardId}`);
-  }
+  mqttClient.publish(ride.kickboardId, JSON.stringify({ cmd: 'stop' }));
 }
 
 async function tryPayment(
@@ -175,6 +177,7 @@ async function tryPayment(
   ride: Ride,
   price: number
 ): Promise<{ merchantUid: string; cardName: string } | null> {
+  if (!user.billingKeys) return null;
   try {
     const merchantUid = `${Date.now()}`;
     for (const billingKey of user.billingKeys) {
