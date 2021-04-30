@@ -98,7 +98,7 @@ async function runSchedule() {
       continue;
     }
 
-    // await terminateRide(ride, user);
+    await terminateRide(ride, user);
   }
 }
 
