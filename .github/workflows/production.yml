@@ -31,7 +31,7 @@ jobs:
           ECR_REPOSITORY: ride-autoend
         run: |
           export PACKAGE_VERSION=$(node -p 'require("./package.json").version')
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION --build-arg .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION"
