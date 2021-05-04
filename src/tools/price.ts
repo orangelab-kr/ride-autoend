@@ -1,4 +1,4 @@
-import { firestore } from './firestore';
+import { firestore } from './firebase';
 
 const costCollection = firestore.collection('cost');
 

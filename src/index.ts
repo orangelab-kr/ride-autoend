@@ -1,4 +1,12 @@
-import { Webhook, firestore, getPrice, iamport, logger, send } from './tools';
+import {
+  Webhook,
+  auth,
+  firestore,
+  getPrice,
+  iamport,
+  logger,
+  send,
+} from './tools';
 import dayjs, { Dayjs } from 'dayjs';
 
 import mqtt from 'mqtt';
@@ -26,7 +34,7 @@ const waitForConnect = () =>
 interface User {
   uid: string;
   username: string;
-  phone: string;
+  phone: string | null;
   currentRide: string | null;
   birthday: Dayjs;
   billingKeys: string[];
@@ -81,10 +89,18 @@ async function runSchedule() {
     const startedAt = ride.startedAt.format('YYYY년 MM월 DD일 HH시 mm분');
     const usedAt = `${startedAt} ~ (${diff}분, ${price.toLocaleString()}원)`;
 
-    if (!user || !user.phone) {
+    if (!user) {
       logger.warn(`사용자를 찾을 수 없습니다. ${JSON.stringify(user)}`);
       logger.warn(usedAt);
       continue;
+    }
+
+    if (!user.phone) {
+      user.phone = await getPhoneByAuth(user);
+      if (!user.phone) {
+        logger.info(`이름 또는 전화번호가 올바르지 않습니다. 무시합니다.`);
+        break;
+      }
     }
 
     const birthday = user.birthday.format('YYYY년 MM월 DD일');
@@ -130,6 +146,7 @@ async function getUser(uid: string): Promise<User | undefined> {
 }
 
 async function terminateRide(ride: Ride, user: User): Promise<void> {
+  if (!user.phone) return;
   const failed = '결제에 실패했습니다. 앱에서 재결제가 필요합니다.';
   const minutes = ride.endedAt.diff(ride.startedAt, 'minutes');
   const price = await getPrice(ride.branch, minutes);
@@ -193,7 +210,7 @@ async function tryPayment(
   ride: Ride,
   price: number
 ): Promise<{ merchantUid: string; cardName: string } | null> {
-  if (!user.billingKeys) return null;
+  if (!user.billingKeys || !user.phone) return null;
   try {
     const merchantUid = `${Date.now()}`;
     for (const billingKey of user.billingKeys) {
@@ -301,6 +318,23 @@ async function getRides(): Promise<Ride[]> {
   });
 
   return rides;
+}
+
+async function getPhoneByAuth(user: User): Promise<string | null> {
+  try {
+    const authUser = await auth.getUser(user.uid);
+    if (!authUser.phoneNumber) return null;
+    await userCol.doc(user.uid).update({ phone: authUser.phoneNumber });
+    logger.info(
+      `${user.username}님의 전화번호를 인증 서버로부터 가져왔습니다.`
+    );
+
+    return authUser.phoneNumber;
+  } catch (err) {
+    logger.error(err.message);
+    logger.info(err.stack);
+    return null;
+  }
 }
 
 main();
