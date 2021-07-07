@@ -39,7 +39,8 @@ export async function send(
   phone: string,
   template: string,
   title: string,
-  props: any
+  props: any,
+  options: any = {}
 ): Promise<void> {
   const {
     ALIGO_PROXY,
@@ -79,6 +80,7 @@ export async function send(
       fsubject_1: title,
       fmessage_1: renderer,
       testmode_yn: process.env.NODE_ENV !== 'prod' ? 'true' : 'false',
+      ...options,
     },
   });
 }

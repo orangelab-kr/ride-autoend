@@ -19,6 +19,7 @@ const mqttClient = mqtt.connect(String(process.env.MQTT_URL), {
   password: String(process.env.MQTT_PASSWORD),
 });
 
+const helmetPrice = 15500;
 const maxHours = Number(process.env.MAX_HOUR || 3);
 const sleep = (timeout: number) =>
   new Promise((resolve) => setTimeout(resolve, timeout));
@@ -30,6 +31,15 @@ const waitForConnect = () =>
       resolve();
     });
   });
+
+enum HelmetStatus {
+  READY = 0,
+  USING = 1,
+  RETURNED = 2,
+  LOST_PAID = 3,
+  LOST_UNPAID = 4,
+  NOT_WORKING = 5,
+}
 
 interface User {
   uid: string;
@@ -49,6 +59,7 @@ interface Ride {
   kickboardName: string;
   kickboardId: string;
   payment?: string;
+  helmet: HelmetStatus;
   startedAt: Dayjs;
   endedAt: Dayjs;
 }
@@ -149,15 +160,15 @@ async function terminateRide(ride: Ride, user: User): Promise<void> {
   if (!user.phone) return;
   const failed = '결제에 실패했습니다. 앱에서 재결제가 필요합니다.';
   const minutes = ride.endedAt.diff(ride.startedAt, 'minutes');
-  const price = await getPrice(ride.branch, minutes);
-  const payment = await tryPayment(user, ride, price);
+  const ridePrice = await getPrice(ride.branch, minutes);
+  const payment = await tryPayment(user, ride, ridePrice);
   const diff = ride.endedAt.diff(ride.startedAt, 'minutes');
   const startedAt = ride.startedAt.format('YYYY년 MM월 DD일 HH시 mm분');
   const endedAt = ride.endedAt.format('HH시 mm분');
   const usedAt = `${startedAt} ~ ${endedAt}(${diff}분)`;
   const userDoc = userCol.doc(user.uid);
   const cardName = payment ? payment.cardName : failed;
-  const priceStr = `${price.toLocaleString()}원`;
+  const priceStr = `${ridePrice.toLocaleString()}원`;
   const props = { user, ride, usedAt, maxHours, priceStr, cardName };
   const isLast = await isLastRide(ride);
   user.username = user.username || '고객';
@@ -169,7 +180,7 @@ async function terminateRide(ride: Ride, user: User): Promise<void> {
       currcoupon: null,
     }),
     rideCol.doc(ride.rideId).update({
-      cost: payment ? price : 0,
+      cost: payment ? ridePrice : 0,
       payment: payment && payment.merchantUid,
       end_time: ride.endedAt.toDate(),
     }),
@@ -190,6 +201,54 @@ async function terminateRide(ride: Ride, user: User): Promise<void> {
       `✅ ${user.username}님이 3시간 이상 이용하여 자동으로 종료되었습니다. ${cardName} / ${usedAt} / ${user.phone} / ${ride.branch} / ${priceStr}`
     ),
   ]);
+
+  if (ride.helmet === HelmetStatus.USING) {
+    const priceStr = `${helmetPrice.toLocaleString()}원`;
+    const helmetPayment = await tryPayment(user, ride, helmetPrice);
+    if (!helmetPayment) {
+      logger.info(
+        `⛑ 🤬 ${user.username}님 킥보드(${ride.kickboardName}) 헬멧이 자동으로 분실 처리되었으며 결제에 실패하였습니다. ${cardName} / ${user.phone} / ${ride.branch}`
+      );
+
+      await Promise.all([
+        Webhook.send(
+          `⛑ 🤬 ${user.username}님 킥보드(${ride.kickboardName}) 헬멧이 자동으로 분실 처리되었으며 결제에 실패하였습니다. ${cardName} / ${user.phone} / ${ride.branch}`
+        ),
+        rideCol.doc(ride.rideId).update({
+          helmet: HelmetStatus.LOST_UNPAID,
+        }),
+      ]);
+
+      return;
+    }
+
+    logger.info(
+      `⛑ 😓 ${user.username}님 킥보드(${ride.kickboardName}) 헬멧이 자동으로 분실 처리되었으며 결제에 성공하였습니다. ${cardName} / ${user.phone} / ${ride.branch}`
+    );
+
+    await Promise.all([
+      Webhook.send(
+        `⛑ 😓 ${user.username}님 킥보드(${ride.kickboardName}) 헬멧이 자동으로 분실 처리되었으며 결제에 성공하였습니다. ${cardName} / ${user.phone} / ${ride.branch}`
+      ),
+      send(
+        user.phone,
+        'TE_9778',
+        `헬멧이 분실 처리되었습니다.`,
+        {
+          user,
+          priceStr,
+        },
+        {
+          button_1: JSON.stringify({
+            button: [{ name: '고객센터 연결', linkType: 'MD' }],
+          }),
+        }
+      ),
+      rideCol.doc(ride.rideId).update({
+        helmet: HelmetStatus.LOST_PAID,
+      }),
+    ]);
+  }
 }
 
 async function getKickboardCodeById(
@@ -232,7 +291,7 @@ async function tryPayment(
       }
 
       logger.info(`결제 실패, ${res.fail_reason}`);
-      await sleep(3000);
+      await sleep(5000);
     }
   } catch (err) {
     logger.error('결제 오류가 발생하였습니다. ' + err.name);
@@ -256,6 +315,7 @@ async function getRideById(rideId: string): Promise<Ride | null> {
     kickboardName: data.kick,
     kickboardId: data.kickName,
     payment: data.payment,
+    helmet: data.helmet,
     startedAt: dayjs(data.start_time._seconds * 1000),
     endedAt: data.end_time ? dayjs(data.end_time._seconds * 1000) : dayjs(),
   };
@@ -295,7 +355,7 @@ async function getRides(): Promise<Ride[]> {
           .orderBy('start_time', 'asc')
           .get()
       : await rideCol
-          .where('uid', '==', 'Lf6lP5Pv1rTPViWUJwKvmMGPwHj2')
+          .where('uid', '==', 'q3h0TuEmJZYuBWNWx722XKiOXSg1')
           .where('end_time', '==', null)
           .orderBy('start_time', 'asc')
           .get();
@@ -309,6 +369,7 @@ async function getRides(): Promise<Ride[]> {
       branch: data.branch,
       cost: data.cost,
       coupon: data.coupon,
+      helmet: data.helmet,
       startedAt: dayjs(data.start_time._seconds * 1000),
       endedAt: data.end_time ? dayjs(data.end_time._seconds * 1000) : dayjs(),
       kickboardName: data.kick,
