@@ -1,10 +1,10 @@
-name: Production Deploy CI
+name: Staging Deploy CI
 
 on:
   push:
-    branches: [prod]
+    branches: [stage]
   pull_request:
-    branches: [prod]
+    branches: [stage]
 
 jobs:
   deploy:
@@ -34,17 +34,17 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ride-autoend
         run: |
-          export PACKAGE_VERSION=$(node -p 'require("./package.json").version')
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION --build-arg CODEARTIFACT_AUTH_TOKEN=${{ steps.login-codeartifact.outputs.CODEARTIFACT_AUTH_TOKEN }} .
+          export PACKAGE_VERSION=$(node -p 'require("./package.json").version')-stage
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest-stage -t $ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION --build-arg CODEARTIFACT_AUTH_TOKEN=${{ steps.login-codeartifact.outputs.CODEARTIFACT_AUTH_TOKEN }} .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest-stage
           echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$PACKAGE_VERSION"
 
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: task-definitions/production.json
+          task-definition: task-definitions/staging.json
           container-name: listener
           image: ${{ steps.build-image.outputs.image }}
 
