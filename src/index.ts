@@ -26,6 +26,8 @@ async function main() {
   logger.info(
     `${maxMinute}분 이상 이동이 없는 라이드를 자동으로 종료하였습니다.`
   );
+
+  process.exit(0);
 }
 
 async function getRiding() {
@@ -90,8 +92,8 @@ async function hasNoMovement(kickboardCode: string): Promise<boolean> {
   return (
     res.length > 0 &&
     res[0].isEnabled === 0 &&
-    res[0].latitude === 0 &&
-    res[0].longitude === 0 &&
+    // res[0].latitude === 0 &&
+    // res[0].longitude === 0 &&
     res[0].speed === 0
   );
 }
