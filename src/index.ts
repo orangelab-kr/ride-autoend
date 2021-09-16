@@ -27,7 +27,7 @@ async function main() {
     `${maxMinute}분 이상 이동이 없는 라이드를 자동으로 종료하였습니다.`
   );
 
-  process.exit(0);
+  process.exit(1);
 }
 
 async function getRiding() {
