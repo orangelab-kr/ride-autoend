@@ -1,5 +1,5 @@
 import { Document, model, Schema } from 'mongoose';
-import { HelmetDoc, StatusDoc } from '.';
+import { StatusDoc } from '.';
 
 export interface KickboardDoc extends Document {
   kickboardId: string;
@@ -41,12 +41,12 @@ export enum KickboardCollect {
 
 export const KickboardSchema = new Schema(
   {
-    kickboardId: { type: String, required: true, unique: true },
+    kickboardId: { type: String, required: true },
     kickboardCode: { type: String, required: true, unique: true },
     franchiseId: { type: String, required: true, index: true },
     regionId: { type: String, required: true, index: true },
-    maxSpeed: { type: Number, required: true, default: null },
-    photo: { type: String, required: true, default: null },
+    maxSpeed: { type: Number, default: null },
+    photo: { type: String, default: null },
     mode: {
       type: Number,
       enum: KickboardMode,

@@ -75,7 +75,7 @@ export async function runLegacy() {
     logger.info('[레거시] 작업을 시작합니다.');
     await runSchedule();
     logger.info('[레거시] 작업을 완료하였습니다.');
-  } catch (err) {
+  } catch (err: any) {
     await Webhook.send(`❌ 오류가 발생하여 레거시 시스템을 재시작합니다.`);
     logger.error(err.message);
     logger.error(err.stack);
@@ -297,7 +297,7 @@ async function tryPayment(
       logger.info(`[레거시] 결제 실패, ${res.fail_reason}`);
       await sleep(5000);
     }
-  } catch (err) {
+  } catch (err: any) {
     logger.error('결제 오류가 발생하였습니다. ' + err.name);
     logger.error(err.stack);
   }
@@ -397,7 +397,7 @@ async function getPhoneByAuth(user: User): Promise<string | null> {
     );
 
     return authUser.phoneNumber;
-  } catch (err) {
+  } catch (err: any) {
     logger.error(err.message);
     logger.info(err.stack);
     return null;

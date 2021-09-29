@@ -29,7 +29,7 @@ export async function getToken(
     setTimeout(() => (token = null), expiry * 3600 * 900);
     token = res.token;
     return token;
-  } catch (err) {
+  } catch (err: any) {
     console.log(err);
     throw Error(`서버에서 잘못된 값을 반환하였습니다.`);
   }

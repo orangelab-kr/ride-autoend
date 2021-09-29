@@ -88,7 +88,6 @@ async function hasNoMovement(kickboardCode: string): Promise<boolean> {
     { $limit: 1 },
   ]);
 
-  console.log(res[0]);
   return (
     res.length > 0 &&
     res[0].isEnabled === 0 &&
