@@ -27,7 +27,7 @@ const waitForConnect = () =>
   new Promise<void>((resolve) => {
     mqttClient.on('connect', () => {
       mqttClient.subscribe('data/#');
-      logger.info(`[레거시] 서버와 연결되었습니다.`);
+      logger.info(`레거시 / 서버와 연결되었습니다.`);
       resolve();
     });
   });
@@ -66,15 +66,15 @@ interface Ride {
 
 export async function runLegacy() {
   try {
-    logger.info('[레거시] 시스템을 시작합니다.');
-    await waitForConnect();
+    logger.info('레거시 / 시스템을 시작합니다.');
     mqttClient.on('error', (err) => {
       throw err;
     });
 
-    logger.info('[레거시] 작업을 시작합니다.');
+    await waitForConnect();
+    logger.info('레거시 / 작업을 시작합니다.');
     await runSchedule();
-    logger.info('[레거시] 작업을 완료하였습니다.');
+    logger.info('레거시 / 작업을 완료하였습니다.');
   } catch (err: any) {
     await Webhook.send(`❌ 오류가 발생하여 레거시 시스템을 재시작합니다.`);
     logger.error(err.message);
@@ -123,7 +123,7 @@ async function runSchedule() {
     );
 
     if (user.currentRide !== ride.rideId) {
-      logger.info('[레거시] 중복 처리된 데이터입니다. 삭제 처리합니다.');
+      logger.info('레거시 / 중복 처리된 데이터입니다. 삭제 처리합니다.');
       await deleteRide(ride, user);
       continue;
     }
@@ -287,14 +287,14 @@ async function tryPayment(
       });
 
       if (res.status === 'paid') {
-        logger.info(`[레거시] 결제에 성공하였습니다. ${billingKey}`);
+        logger.info(`레거시 / 결제에 성공하였습니다. ${billingKey}`);
         return {
           merchantUid,
           cardName: `${res.card_number} (${res.card_name})`,
         };
       }
 
-      logger.info(`[레거시] 결제 실패, ${res.fail_reason}`);
+      logger.info(`레거시 / 결제 실패, ${res.fail_reason}`);
       await sleep(5000);
     }
   } catch (err: any) {
@@ -327,7 +327,7 @@ async function getRideById(rideId: string): Promise<Ride | null> {
 
 async function deleteRide(ride: Ride, user: User): Promise<void> {
   if (user.currentRide === ride.rideId) {
-    logger.info(`[레거시] 탑승 중인 라이드입니다. 강제로 종료합니다.`);
+    logger.info(`레거시 / 탑승 중인 라이드입니다. 강제로 종료합니다.`);
     await userCol.doc(user.uid).update({ curr_ride: null, currcoupon: null });
   }
 
@@ -341,7 +341,7 @@ async function deleteRide(ride: Ride, user: User): Promise<void> {
   let userRideId;
   userRides.forEach((ride) => (userRideId = ride.id));
   if (userRideId) {
-    logger.info(`[레거시] 이미 결제된 라이드입니다.`);
+    logger.info(`레거시 / 이미 결제된 라이드입니다.`);
     await userCol.doc(user.uid).collection('ride').doc(userRideId).delete();
   }
 
